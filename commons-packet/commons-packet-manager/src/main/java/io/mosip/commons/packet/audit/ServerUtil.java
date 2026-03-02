@@ -9,7 +9,7 @@ import java.net.UnknownHostException;
 public class ServerUtil {
 
 	/** The server instance. */
-	private static ServerUtil serverInstance = null;
+	private static ServerUtil INSTANCE = new ServerUtil();
 	
 	/** The Constant LOGGER. */
 	private static final Logger LOGGER = LoggerFactory.getLogger(ServerUtil.class);
@@ -30,15 +30,8 @@ public class ServerUtil {
 	 *
 	 * @return The ServerUtil object
 	 */
-	public static synchronized ServerUtil getServerUtilInstance() {
-
-		if (serverInstance == null) {
-			serverInstance = new ServerUtil();
-			return serverInstance;
-		} else {
-			return serverInstance;
-		}
-
+	public static ServerUtil getServerUtilInstance() {
+		return INSTANCE;
 	}
 
 	/**
@@ -55,7 +48,6 @@ public class ServerUtil {
 			LOGGER.error(noHost, e.getMessage());
 			return "UNKNOWN-HOST";
 		}
-
 	}
 
 	/**
@@ -72,5 +64,4 @@ public class ServerUtil {
 			return "UNKNOWN-HOST";
 		}
 	}
-
 }

@@ -16,7 +16,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.nio.charset.StandardCharsets;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -131,13 +130,11 @@ public class PacketReaderImpl implements IPacketReader {
 
 		try {
 			for (String srcPacket : sourcePacketNames) {
-				byte[] idBytes = getFileFromPacket(id, srcPacket, source, process, "ID");
-				if (idBytes != null) {
-					String jsonString = new String(idBytes, StandardCharsets.UTF_8);
-                //InputStream idJsonStream = ZipUtils.unzipAndGetFile(packet.getPacket(), "ID");
-				//if (idJsonStream != null) {
-				//byte[] idBytes = IOUtils.toByteArray(idJsonStream);
-				//String jsonString = new String(idBytes);
+                Packet packet = packetKeeper.getPacket(getPacketInfo(id, srcPacket, source, process));
+                InputStream idJsonStream = ZipUtils.unzipAndGetFile(packet.getPacket(), "ID");
+                if (idJsonStream != null) {
+                    byte[] bytearray = IOUtils.toByteArray(idJsonStream);
+                    String jsonString = new String(bytearray);
                     LinkedHashMap<String, Object> currentIdMap = (LinkedHashMap<String, Object>) mapper
                             .readValue(jsonString, LinkedHashMap.class).get(IDENTITY);
 
@@ -210,14 +207,12 @@ public class PacketReaderImpl implements IPacketReader {
 			if (documentString != null && schemaVersion != null) {
 				JSONObject documentMap = new JSONObject(documentString);
 				String packetName = idSchemaUtils.getSource(documentName, schemaVersion);
+				Packet packet = packetKeeper.getPacket(getPacketInfo(id, packetName, source, process));
 				String value = documentMap.has(VALUE) ? documentMap.get(VALUE).toString() : null;
-				byte[] docBytes = getFileFromPacket(id, packetName, source, process, value);
-				if (docBytes != null) {
-				//InputStream documentStream = ZipUtils.unzipAndGetFile(packet.getPacket(), value);
-				//if (documentStream != null) {
+				InputStream documentStream = ZipUtils.unzipAndGetFile(packet.getPacket(), value);
+				if (documentStream != null) {
 					Document document = new Document();
-					//document.setDocument(IOUtils.toByteArray(documentStream));
-					document.setDocument(docBytes);
+					document.setDocument(IOUtils.toByteArray(documentStream));
 					document.setValue(value);
 					document.setType(documentMap.has(TYPE) ? documentMap.get(TYPE).toString() : null);
 					document.setFormat(documentMap.has(FORMAT) ? documentMap.get(FORMAT).toString() : null);
@@ -344,17 +339,12 @@ public class PacketReaderImpl implements IPacketReader {
 		if (packetName == null || fileName == null)
 			return null;
 
-		byte[] bioBytes = getFileFromPacket(id, packetName, source, process, fileName);
-		if (bioBytes == null) {
+		Packet packet = packetKeeper.getPacket(getPacketInfo(id, packetName, source, process));
+		InputStream biometrics = ZipUtils.unzipAndGetFile(packet.getPacket(), fileName);
+		if (biometrics == null)
 			return null;
-		}
 
-		return CbeffValidator.getBIRFromXML(bioBytes);
-		//InputStream biometrics = ZipUtils.unzipAndGetFile(packet.getPacket(), fileName);
-		//if (biometrics == null)
-		//	return null;
-
-		//return CbeffValidator.getBIRFromXML(IOUtils.toByteArray(biometrics));
+		return CbeffValidator.getBIRFromXML(IOUtils.toByteArray(biometrics));
 	}
 
 	@Override
@@ -364,12 +354,11 @@ public class PacketReaderImpl implements IPacketReader {
 
 		try {
 			for (String packetName : sourcePacketNames) {
-				byte[] metaBytes = getFileFromPacket(id, packetName, source, process, "PACKET_META_INFO");
-				if (metaBytes != null) {
-				//InputStream idJsonStream = ZipUtils.unzipAndGetFile(packet.getPacket(), "PACKET_META_INFO");
-				//if (idJsonStream != null) {
-					//byte[] metaBytes = IOUtils.toByteArray(idJsonStream);
-					String jsonString = new String(metaBytes, StandardCharsets.UTF_8);
+				Packet packet = packetKeeper.getPacket(getPacketInfo(id, packetName, source, process));
+				InputStream idJsonStream = ZipUtils.unzipAndGetFile(packet.getPacket(), "PACKET_META_INFO");
+				if (idJsonStream != null) {
+					byte[] bytearray = IOUtils.toByteArray(idJsonStream);
+					String jsonString = new String(bytearray);
 					LinkedHashMap<String, Object> currentIdMap = (LinkedHashMap<String, Object>) mapper
 							.readValue(jsonString, LinkedHashMap.class).get(IDENTITY);
 
@@ -405,12 +394,11 @@ public class PacketReaderImpl implements IPacketReader {
 		String[] sourcePacketNames = packetNames.split(",");
 		try {
 			for (String srcPacket : sourcePacketNames) {
-				byte[] auditBytes = getFileFromPacket(id, srcPacket, source, process, "audit");
-				if (auditBytes != null) {
-				//InputStream auditJson = ZipUtils.unzipAndGetFile(packet.getPacket(), "audit");
-				//if (auditJson != null) {
-					//byte[] auditBytes = IOUtils.toByteArray(auditJson);
-					String jsonString = new String(auditBytes, StandardCharsets.UTF_8);
+				Packet packet = packetKeeper.getPacket(getPacketInfo(id, srcPacket, source, process));
+				InputStream auditJson = ZipUtils.unzipAndGetFile(packet.getPacket(), "audit");
+				if (auditJson != null) {
+					byte[] bytearray = IOUtils.toByteArray(auditJson);
+					String jsonString = new String(bytearray);
 					List<Map<String, String>> currentMap = (List<Map<String, String>>) mapper.readValue(jsonString,
 							List.class);
 					finalMap.addAll(currentMap);
@@ -472,39 +460,4 @@ public class PacketReaderImpl implements IPacketReader {
 		return isPresent;
 	}
 
-	/**
-	 * Retrieves a single file from the packet (unzips only if not cached).
-	 * This method is cached per registration ID + source + process + filename.
-	 *
-	 * @param id        registration ID
-	 * @param source    source (e.g. "registration-client")
-	 * @param process   process (e.g. "NEW", "UPDATE")
-	 * @param fileName  exact file name inside ZIP (e.g. "biometrics/ID1.xml", "ID", "audit")
-	 * @return byte[] of the file content, or null if not found
-	 * @throws Exception if unzip or fetch fails
-	 */
-	@Cacheable(
-			value = "packetFiles",
-			key = "{#id, #packetName, #source, #process, #fileName}",
-			unless = "#result == null"
-	)
-	public byte[] getFileFromPacket(String id, String packetName, String source, String process, String fileName) throws Exception {
-		LOGGER.debug(PacketManagerLogger.SESSIONID, PacketManagerLogger.REGISTRATIONID, id,
-				"Fetching cached file: {} (source={}, process={})", fileName, source, process);
-
-		PacketInfo packetInfo = getPacketInfo(id, packetName, source, process);
-		Packet packet = packetKeeper.getPacket(packetInfo);
-
-		byte[] fileBytes = ZipUtils.unzipAndGetFileBytes(packet.getPacket(), fileName);
-
-		if (fileBytes == null) {
-			LOGGER.debug(PacketManagerLogger.SESSIONID, PacketManagerLogger.REGISTRATIONID, id,
-					"File not found in packet: {}", fileName);
-		} else {
-			LOGGER.debug(PacketManagerLogger.SESSIONID, PacketManagerLogger.REGISTRATIONID, id,
-					"Retrieved file from cache or unzip: {} ({} bytes)", fileName, fileBytes.length);
-		}
-
-		return fileBytes;
-	}
 }
